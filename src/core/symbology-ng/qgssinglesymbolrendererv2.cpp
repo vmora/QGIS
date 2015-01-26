@@ -377,9 +377,16 @@ QgsLegendSymbolList QgsSingleSymbolRendererV2::legendSymbolItems( double scaleDe
 
 QgsLegendSymbolListV2 QgsSingleSymbolRendererV2::legendSymbolItemsV2() const
 {
-  QgsLegendSymbolListV2 lst;
-  lst << QgsLegendSymbolItemV2( mSymbol.data(), QString(), 0 );
-  return lst;
+  if ( mLegendSymbolList.data() )
+  {
+    return *mLegendSymbolList;
+  }
+  else
+  {
+    QgsLegendSymbolListV2 lst;
+    lst << QgsLegendSymbolItemV2( mSymbol.data(), QString(), 0 );
+    return lst;
+  }
 }
 
 QgsSingleSymbolRendererV2* QgsSingleSymbolRendererV2::convertFromRenderer( const QgsFeatureRendererV2 *renderer )

@@ -32,6 +32,7 @@
 #include "qgsfieldsproperties.h"
 #include "qgslabeldialog.h"
 #include "qgslabelinggui.h"
+#include "qgslegendinggui.h"
 #include "qgslabel.h"
 #include "qgsgenericprojectionselector.h"
 #include "qgslogger.h"
@@ -138,6 +139,15 @@ QgsVectorLayerProperties::QgsVectorLayerProperties(
     labelDialog = 0;
     mOptsPage_Labels->setEnabled( false ); // disable labeling item
     mOptsPage_LabelsOld->setEnabled( false ); // disable labeling (deprecated) item
+  }
+
+  // Create the Legend tab
+  {
+    QVBoxLayout * legendingLayout = new QVBoxLayout( labelOptionsFrame );
+    legendingLayout->setMargin(0);
+    QgsLegendingGui * legendingGui = new QgsLegendingGui( layer, legendingFrame );
+    legendingGui->layout()->setContentsMargins( -1, 0, -1, 0 );
+    legendingLayout->addWidget( legendingGui );
   }
 
   // Create the Actions dialog tab
