@@ -24,6 +24,7 @@
 #include "qgsrasterlayer.h"
 #include "qgsrendererv2.h"
 #include "qgssymbollayerv2utils.h"
+#include "qgssymbollayerv2.h"
 #include "qgsvectorlayer.h"
 
 
@@ -167,7 +168,7 @@ QVariant QgsSymbolV2LegendNode::data( int role ) const
   }
   else if ( role == Qt::DecorationRole )
   {
-    QSize iconSize( 16, 16 ); // TODO: configurable
+    QSize iconSize(16,16); 
     const int indentSize = 20;
     if ( mPixmap.isNull() )
     {
@@ -620,4 +621,186 @@ void QgsWMSLegendNode::invalidateMapBasedData()
   // TODO: do this only if this extent != prev extent ?
   mValid = false;
   emit dataChanged();
+}
+
+////
+
+QgsCustomLegendNode::QgsCustomLegendNode( QgsLayerTreeLayer* nodeLayer, const QgsLegendSymbolItemV2& item, const QgsFeature& feature, const QgsFields & fields, const QSize & size, QObject* parent )
+    : QgsSymbolV2LegendNode( nodeLayer, item, parent )
+    , mFeature( feature )
+    , mFields( fields )
+    , mSize( size )
+{
+}
+
+QVariant QgsCustomLegendNode::data( int role ) const
+{
+  if ( role == Qt::DecorationRole )
+  {
+    const int indentSize = 20;
+    if ( mPixmap.isNull() )
+    {
+      QPixmap pix(mSize);
+      pix.fill( Qt::transparent );
+      if ( mItem.symbol() )
+      {
+        double scale = 0.0;
+        double mupp = 0.0;
+        int dpi = 0;
+        if ( model() )
+          model()->legendMapViewData( &mupp, &dpi, &scale );
+        bool validData = mupp != 0 && dpi != 0 && scale != 0;
+
+        // setup temporary render context
+        QgsRenderContext context;
+        QPainter painter;
+        if ( validData )
+        {
+          context.setScaleFactor( dpi / 25.4 );
+          context.setRendererScale( scale );
+          context.setMapToPixel( QgsMapToPixel( mupp ) ); // hope it's ok to leave out other params
+          context.setPainter( &painter );
+        }
+        else
+        {
+          context = QgsSymbolLayerV2Utils::createRenderContext( &painter );
+        }
+
+        painter.begin( &pix );
+        painter.setRenderHint( QPainter::Antialiasing );
+        
+        QgsSymbolV2RenderContext symbolContext( context, mItem.symbol()->outputUnit(), mItem.symbol()->alpha(), false, 0, &mFeature, &mFields, mItem.symbol()->mapUnitScale() );
+
+        for ( auto symbolLayer : mItem.symbol()->symbolLayers()  )
+        {
+          if ( mItem.symbol()->type() == QgsSymbolV2::Fill && symbolLayer->type() == QgsSymbolV2::Line )
+          {
+            // line symbol layer would normally draw just a line
+            // so we override this case to force it to draw a polygon outline
+            QgsLineSymbolLayerV2* lsl = static_cast<QgsLineSymbolLayerV2*>(symbolLayer);
+
+            // from QgsFillSymbolLayerV2::drawPreviewIcon()
+            QPolygonF poly = QRectF( QPointF( 0, 0 ), QPointF( mSize.width() - 1, mSize.height() - 1 ) );
+            lsl->startRender( symbolContext );
+            lsl->renderPolygonOutline( poly, NULL, symbolContext );
+            lsl->stopRender( symbolContext );
+          }
+          else
+            symbolLayer->drawPreviewIcon( symbolContext, mSize );
+        }
+      }
+      else
+      {
+        pix = QPixmap( mSize );
+        pix.fill( Qt::transparent );
+      }
+
+      if ( mItem.level() == 0 || ( model() && model()->testFlag( QgsLayerTreeModel::ShowLegendAsTree ) ) )
+        mPixmap = pix;
+      else
+      {
+        // ident the symbol icon to make it look like a tree structure
+        QPixmap pix2( pix.width() + mItem.level() * indentSize, pix.height() );
+        pix2.fill( Qt::transparent );
+        QPainter p( &pix2 );
+        p.drawPixmap( mItem.level() * indentSize, 0, pix );
+        p.end();
+        mPixmap = pix2;
+      }
+    }
+    return mPixmap;
+  }
+  else
+  {
+    return QgsSymbolV2LegendNode::data( role );
+  } 
+}
+
+QSizeF QgsCustomLegendNode::drawSymbol( const QgsLegendSettings& settings, ItemContext* ctx, double itemHeight ) const
+{
+  QgsSymbolV2* s = mItem.symbol();
+  if ( !s )
+  {
+    return QSizeF();
+  }
+
+  // setup temporary render context
+  QgsRenderContext context;
+  context.setScaleFactor( settings.dpi() / 25.4 );
+  context.setRendererScale( settings.mapScale() );
+  context.setMapToPixel( QgsMapToPixel( 1 / ( settings.mmPerMapUnit() * context.scaleFactor() ) ) ); // hope it's ok to leave out other params
+  context.setForceVectorOutput( true );
+  context.setPainter( ctx ? ctx->painter : 0 );
+
+  //Consider symbol size for point markers
+  double height = settings.symbolSize().height();
+  double width = settings.symbolSize().width();
+  double size = 0;
+  //Center small marker symbols
+  double widthOffset = 0;
+  double heightOffset = 0;
+
+  if ( QgsMarkerSymbolV2* markerSymbol = dynamic_cast<QgsMarkerSymbolV2*>( s ) )
+  {
+    // allow marker symbol to occupy bigger area if necessary
+    size = markerSymbol->size() * QgsSymbolLayerV2Utils::lineWidthScaleFactor( context, s->outputUnit(), s->mapUnitScale() ) / context.scaleFactor();
+    height = size;
+    width = size;
+    if ( width < settings.symbolSize().width() )
+    {
+      widthOffset = ( settings.symbolSize().width() - width ) / 2.0;
+    }
+    if ( height < settings.symbolSize().height() )
+    {
+      heightOffset = ( settings.symbolSize().height() - height ) / 2.0;
+    }
+  }
+
+  if ( ctx )
+  {
+    double currentXPosition = ctx->point.x();
+    double currentYCoord = ctx->point.y() + ( itemHeight - settings.symbolSize().height() ) / 2;
+    QPainter* p = ctx->painter;
+
+    //setup painter scaling to dots so that raster symbology is drawn to scale
+    double dotsPerMM = context.scaleFactor();
+
+    int opacity = 255;
+    if ( QgsVectorLayer* vectorLayer = dynamic_cast<QgsVectorLayer*>( layerNode()->layer() ) )
+      opacity = 255 - ( 255 * vectorLayer->layerTransparency() / 100 );
+
+    p->save();
+    p->setRenderHint( QPainter::Antialiasing );
+    p->translate( currentXPosition + widthOffset, currentYCoord + heightOffset );
+    p->scale( 1.0 / dotsPerMM, 1.0 / dotsPerMM );
+    if ( opacity != 255 && settings.useAdvancedEffects() )
+    {
+      //semi transparent layer, so need to draw symbol to an image (to flatten it first)
+      //create image which is same size as legend rect, in case symbol bleeds outside its alloted space
+      QSize tempImageSize( width * dotsPerMM, height * dotsPerMM );
+      QImage tempImage = QImage( tempImageSize, QImage::Format_ARGB32 );
+      tempImage.fill( Qt::transparent );
+      QPainter imagePainter( &tempImage );
+      context.setPainter( &imagePainter );
+
+      s->drawPreviewIcon( &imagePainter, tempImageSize, &context );
+      
+      
+      context.setPainter( ctx->painter );
+      //reduce opacity of image
+      imagePainter.setCompositionMode( QPainter::CompositionMode_DestinationIn );
+      imagePainter.fillRect( tempImage.rect(), QColor( 0, 0, 0, opacity ) );
+      imagePainter.end();
+      //draw rendered symbol image
+      p->drawImage( 0, 0, tempImage );
+    }
+    else
+    {
+      s->drawPreviewIcon( p, QSize( width * dotsPerMM, height * dotsPerMM ), &context );
+    }
+    p->restore();
+  }
+
+  return QSizeF( qMax( width + 2 * widthOffset, ( double ) settings.symbolSize().width() ),
+                 qMax( height + 2 * heightOffset, ( double ) settings.symbolSize().height() ) );
 }

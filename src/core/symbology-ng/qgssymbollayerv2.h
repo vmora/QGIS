@@ -114,6 +114,7 @@ class CORE_EXPORT QgsSymbolLayerV2
     virtual void removeDataDefinedProperty( const QString& property );
     virtual void removeDataDefinedProperties();
     bool hasDataDefinedProperties() const { return mDataDefinedProperties.size() > 0; }
+    QList< QString > dataDefinedProperties() const { return mDataDefinedProperties.keys(); }
 
     virtual bool writeDxf( QgsDxfExport& e,
                            double mmMapUnitScaleFactor,

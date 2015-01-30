@@ -143,7 +143,7 @@ QgsVectorLayerProperties::QgsVectorLayerProperties(
 
   // Create the Legend tab
   {
-    QVBoxLayout * legendingLayout = new QVBoxLayout( labelOptionsFrame );
+    QVBoxLayout * legendingLayout = new QVBoxLayout( legendingFrame );
     legendingLayout->setMargin(0);
     QgsLegendingGui * legendingGui = new QgsLegendingGui( layer, legendingFrame );
     legendingGui->layout()->setContentsMargins( -1, 0, -1, 0 );

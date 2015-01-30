@@ -152,7 +152,7 @@ class CORE_EXPORT QgsSymbolV2LegendNode : public QgsLayerTreeModelLegendNode
     virtual QVariant data( int role ) const override;
     virtual bool setData( const QVariant& value, int role ) override;
 
-    QSizeF drawSymbol( const QgsLegendSettings& settings, ItemContext* ctx, double itemHeight ) const override;
+    virtual QSizeF drawSymbol( const QgsLegendSettings& settings, ItemContext* ctx, double itemHeight ) const override;
 
     virtual void setEmbeddedInParent( bool embedded ) override;
 
@@ -162,10 +162,9 @@ class CORE_EXPORT QgsSymbolV2LegendNode : public QgsLayerTreeModelLegendNode
 
     virtual void invalidateMapBasedData() override;
 
-  private:
+  protected:
     void updateLabel();
 
-  private:
     QgsLegendSymbolItemV2 mItem;
     mutable QPixmap mPixmap; // cached symbol preview
     QString mLabel;
@@ -267,6 +266,24 @@ class CORE_EXPORT QgsWMSLegendNode : public QgsLayerTreeModelLegendNode
     bool mValid;
 
     mutable QScopedPointer<QgsImageFetcher> mFetcher;
+};
+
+
+// this class holds a feature wich is used to draw the symbol
+// this is especially usefull for symbols with data-defined properties
+class CORE_EXPORT QgsCustomLegendNode : public QgsSymbolV2LegendNode
+{
+  public:
+    QgsCustomLegendNode( QgsLayerTreeLayer* nodeLayer, const QgsLegendSymbolItemV2& item, const QgsFeature& feature, const QgsFields & fields, const QSize & size = QSize(16,16), QObject* parent = 0 );
+    
+    virtual QVariant data( int role ) const override;
+
+    QSizeF drawSymbol( const QgsLegendSettings& settings, ItemContext* ctx, double itemHeight ) const;
+  
+  private:
+    QgsFeature mFeature;
+    QgsFields mFields;
+    QSize mSize;
 };
 
 #endif // QGSLAYERTREEMODELLEGENDNODE_H
