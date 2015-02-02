@@ -25,6 +25,7 @@
 #include "qgslayertreemodel.h"
 #include "qgslayertreemodellegendnode.h"
 #include "qgsmaplayerlegend.h"
+#include "qgsfeaturerequest.h"
 
 #include <QWidget>
 #include <QScopedPointer>
@@ -84,10 +85,12 @@ class APP_EXPORT QgsLegendingGui : public QWidget, private Ui::QgsLegendingGuiBa
     QList< QgsCustomVectorLayerLegend::NodeData > mDataList; // do not clear, the list items use an index on this list 
     QStandardItemModel mTargetList;
 
+    void populateSourceList( const QgsFeatureRequest & request = QgsFeatureRequest() );
 
   protected slots:
     void on_checkBox_toggled( bool checked);
     void on_symbolsInLayerButton_clicked();
+    void on_symbolsInExtendButton_clicked();
     void updateCustomLegend();
 
 };

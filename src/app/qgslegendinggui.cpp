@@ -24,6 +24,8 @@
 #include "qgslegendsymbolitemv2.h"
 #include "qgssymbolv2.h"
 #include "qgssymbollayerv2.h"
+#include "qgisapp.h"
+#include "qgsmapcanvas.h"
 
 #include <QApplication>
 #include <QSettings>
@@ -109,10 +111,12 @@ QgsLegendingGui::QgsLegendingGui( QgsVectorLayer* layer, QWidget* parent )
   targetListView->setIconSize( QSize(32,32) );
   
   connect( checkBox, SIGNAL( toggled( bool ) ), this, SLOT( on_checkBox_toggled( bool ) ) );
+  
   connect( symbolsInLayerButton, SIGNAL( clicked() ), this, SLOT( on_symbolsInLayerButton_clicked() ) );
+  connect( symbolsInExtendButton, SIGNAL( clicked() ), this, SLOT( on_symbolsInExtendButton_clicked() ) );
+
+
   connect( &mTargetList, SIGNAL( dataChanged(const QModelIndex &, const QModelIndex &) ), this, SLOT( updateCustomLegend() ) );
-  //connect( &mTargetList, SIGNAL( itemChanged(QStandardItem *) ), this, SLOT( updateCustomLegend() ) );
-  //connect( &mTargetList, SIGNAL( rowsInserted( const QModelIndex &, int, int ) ), this, SLOT( updateCustomLegend() ) );
   connect( &mTargetList, SIGNAL( rowsMoved( const QModelIndex &, int, int, const QModelIndex &, int ) ), this, SLOT( updateCustomLegend() ) );
   connect( &mTargetList, SIGNAL( rowsRemoved( const QModelIndex &, int, int) ), this, SLOT( updateCustomLegend() ) );
 }
@@ -130,6 +134,16 @@ void QgsLegendingGui::on_checkBox_toggled( bool checked )
 }
 
 void QgsLegendingGui::on_symbolsInLayerButton_clicked()
+{
+  populateSourceList();
+}
+
+void QgsLegendingGui::on_symbolsInExtendButton_clicked()
+{
+  populateSourceList( QgsFeatureRequest( QgisApp::instance()->mapCanvas()->extent() ) );
+}
+  
+void QgsLegendingGui::populateSourceList( const QgsFeatureRequest & request )
 {
   QgsFeatureRendererV2* r = mLayer->rendererV2();
   if ( !r )
@@ -159,7 +173,7 @@ void QgsLegendingGui::on_symbolsInLayerButton_clicked()
   // set of features with all possible variations
   QMap< QString , QgsFeature > propIdMap;
   {
-    QgsFeatureIterator fit = mLayer->getFeatures();
+    QgsFeatureIterator fit = mLayer->getFeatures(request);
     QgsFeature feature;
     while ( fit.nextFeature( feature ) )
     {
@@ -185,7 +199,7 @@ void QgsLegendingGui::on_symbolsInLayerButton_clicked()
     }
   }
 
-  // render all features
+  // render all features 
   mSourceList.clear();
   for ( QMapIterator<QString, QgsFeature> it( propIdMap ); it.hasNext(); ) 
   {

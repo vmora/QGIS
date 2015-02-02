@@ -783,7 +783,25 @@ QSizeF QgsCustomLegendNode::drawSymbol( const QgsLegendSettings& settings, ItemC
       QPainter imagePainter( &tempImage );
       context.setPainter( &imagePainter );
 
-      s->drawPreviewIcon( &imagePainter, tempImageSize, &context );
+      QgsSymbolV2RenderContext symbolContext( context, mItem.symbol()->outputUnit(), mItem.symbol()->alpha(), false, 0, &mFeature, &mFields, mItem.symbol()->mapUnitScale() );
+
+      for ( auto symbolLayer : mItem.symbol()->symbolLayers()  )
+      {
+        if ( mItem.symbol()->type() == QgsSymbolV2::Fill && symbolLayer->type() == QgsSymbolV2::Line )
+        {
+          // line symbol layer would normally draw just a line
+          // so we override this case to force it to draw a polygon outline
+          QgsLineSymbolLayerV2* lsl = static_cast<QgsLineSymbolLayerV2*>(symbolLayer);
+
+          // from QgsFillSymbolLayerV2::drawPreviewIcon()
+          QPolygonF poly = QRectF( QPointF( 0, 0 ), QPointF( mSize.width() - 1, mSize.height() - 1 ) );
+          lsl->startRender( symbolContext );
+          lsl->renderPolygonOutline( poly, NULL, symbolContext );
+          lsl->stopRender( symbolContext );
+        }
+        else
+          symbolLayer->drawPreviewIcon( symbolContext, mSize );
+      }
       
       
       context.setPainter( ctx->painter );
@@ -796,7 +814,25 @@ QSizeF QgsCustomLegendNode::drawSymbol( const QgsLegendSettings& settings, ItemC
     }
     else
     {
-      s->drawPreviewIcon( p, QSize( width * dotsPerMM, height * dotsPerMM ), &context );
+      QgsSymbolV2RenderContext symbolContext( context, mItem.symbol()->outputUnit(), mItem.symbol()->alpha(), false, 0, &mFeature, &mFields, mItem.symbol()->mapUnitScale() );
+
+      for ( auto symbolLayer : mItem.symbol()->symbolLayers()  )
+      {
+        if ( mItem.symbol()->type() == QgsSymbolV2::Fill && symbolLayer->type() == QgsSymbolV2::Line )
+        {
+          // line symbol layer would normally draw just a line
+          // so we override this case to force it to draw a polygon outline
+          QgsLineSymbolLayerV2* lsl = static_cast<QgsLineSymbolLayerV2*>(symbolLayer);
+
+          // from QgsFillSymbolLayerV2::drawPreviewIcon()
+          QPolygonF poly = QRectF( QPointF( 0, 0 ), QPointF( mSize.width() - 1, mSize.height() - 1 ) );
+          lsl->startRender( symbolContext );
+          lsl->renderPolygonOutline( poly, NULL, symbolContext );
+          lsl->stopRender( symbolContext );
+        }
+        else
+          symbolLayer->drawPreviewIcon( symbolContext, mSize );
+      }
     }
     p->restore();
   }
