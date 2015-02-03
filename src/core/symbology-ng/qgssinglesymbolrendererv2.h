@@ -85,9 +85,6 @@ class CORE_EXPORT QgsSingleSymbolRendererV2 : public QgsFeatureRendererV2
     //! @returns a new renderer if the conversion was possible, otherwise 0.
     static QgsSingleSymbolRendererV2* convertFromRenderer( const QgsFeatureRendererV2 *renderer );
 
-    void setLegendSymbolList( const QgsLegendSymbolListV2& list ){ mLegendSymbolList.reset( new QgsLegendSymbolListV2( list ) ); }
-    void resetLegendSymbolList(){ mLegendSymbolList.reset(); }
-
   protected:
     QScopedPointer<QgsSymbolV2> mSymbol;
     QScopedPointer<QgsExpression> mRotation;
@@ -97,9 +94,6 @@ class CORE_EXPORT QgsSingleSymbolRendererV2 : public QgsFeatureRendererV2
     // temporary stuff for rendering
     QScopedPointer<QgsSymbolV2> mTempSymbol;
     double mOrigSize;
-
-    // custom symbol list
-    QScopedPointer<QgsLegendSymbolListV2> mLegendSymbolList;
 };
 
 
