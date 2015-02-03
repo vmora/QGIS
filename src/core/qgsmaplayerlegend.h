@@ -62,8 +62,7 @@ class CORE_EXPORT QgsMapLayerLegend : public QObject
     static QgsMapLayerLegend* load( QgsVectorLayer* vl, const QDomNode& layer_node );
 
     //! Save legend in xml
-    //! @return wether or not something was written in the node
-    virtual bool writeXml( QDomNode & /*layerNode*/, QDomDocument & ) const { return false; }
+    virtual bool writeXml( QDomNode & /*layerNode*/, QDomDocument & ) const { return true; }
 
   signals:
     //! Emitted when existing items/nodes got invalid and should be replaced by new ones

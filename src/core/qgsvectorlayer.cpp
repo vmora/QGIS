@@ -1499,7 +1499,7 @@ bool QgsVectorLayer::writeXml( QDomNode & layer_node,
   QString errorMsg;
   if (! writeSymbology( layer_node, document, errorMsg ) ) return false;
 
-  legend()->writeXml( layer_node, document );
+  return legend()->writeXml( layer_node, document );
 
 } // bool QgsVectorLayer::writeXml
 
