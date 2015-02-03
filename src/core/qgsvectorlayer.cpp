@@ -1343,7 +1343,7 @@ bool QgsVectorLayer::readXml( const QDomNode& layer_node )
 
   readStyleManager( layer_node );
 
-  setLegend( QgsMapLayerLegend::defaultVectorLegend( this ) );
+  setLegend( QgsMapLayerLegend::load( this, layer_node ) );
 
   return mValid;               // should be true if read successfully
 
@@ -1497,8 +1497,12 @@ bool QgsVectorLayer::writeXml( QDomNode & layer_node,
 
   // renderer specific settings
   QString errorMsg;
-  return writeSymbology( layer_node, document, errorMsg );
+  if (! writeSymbology( layer_node, document, errorMsg ) ) return false;
+
+  legend()->writeXml( layer_node, document );
+
 } // bool QgsVectorLayer::writeXml
+
 
 bool QgsVectorLayer::readSymbology( const QDomNode& node, QString& errorMessage )
 {

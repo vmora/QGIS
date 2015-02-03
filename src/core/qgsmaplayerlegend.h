@@ -23,6 +23,8 @@ class QgsLayerTreeModelLegendNode;
 class QgsPluginLayer;
 class QgsRasterLayer;
 class QgsVectorLayer;
+class QDomDocument;
+class QDomNode;
 
 
 /**
@@ -55,6 +57,13 @@ class CORE_EXPORT QgsMapLayerLegend : public QObject
 
     //! Create new legend implementation for raster layer
     static QgsMapLayerLegend* defaultPluginLegend( QgsPluginLayer* pl );
+
+    //! Create new legend from xml element
+    static QgsMapLayerLegend* load( QgsVectorLayer* vl, const QDomNode& layer_node );
+
+    //! Save legend in xml
+    //! @return wether or not something was written in the node
+    virtual bool writeXml( QDomNode & /*layerNode*/, QDomDocument & ) const { return false; }
 
   signals:
     //! Emitted when existing items/nodes got invalid and should be replaced by new ones
@@ -127,6 +136,22 @@ class CORE_EXPORT QgsDefaultPluginLayerLegend : public QgsMapLayerLegend
 
   private:
     QgsPluginLayer* mLayer;
+};
+
+/** Custom legend for vector layers
+ * @note added in 2.10
+ */
+class CORE_EXPORT QgsCustomVectorLayerLegend : public QgsMapLayerLegend
+{
+  public:
+    explicit QgsCustomVectorLayerLegend( QgsVectorLayer* vl );
+
+    QList<QgsLayerTreeModelLegendNode*> createLayerTreeModelLegendNodes( QgsLayerTreeLayer* nodeLayer ) override;
+
+    bool writeXml( QDomNode & layerNode, QDomDocument & document) const override;
+
+  private:
+    QgsVectorLayer* mLayer;
 };
 
 #endif // QGSMAPLAYERLEGEND_H

@@ -45,6 +45,16 @@ QgsMapLayerLegend* QgsMapLayerLegend::defaultPluginLegend( QgsPluginLayer* pl )
   return new QgsDefaultPluginLayerLegend( pl );
 }
 
+QgsMapLayerLegend* QgsMapLayerLegend::load( QgsVectorLayer* vl, const QDomNode& layer_node )
+{
+  QDomNode customLegendNode = layer_node.namedItem( "CustomVectorLayerLegend" ).toElement();
+  if ( !customLegendNode.isNull() )
+    return new QgsCustomVectorLayerLegend( vl );
+  else
+    return new QgsDefaultVectorLayerLegend( vl );
+}
+
+
 // -------------------------------------------------------------------------
 
 
@@ -282,4 +292,50 @@ QList<QgsLayerTreeModelLegendNode*> QgsDefaultPluginLayerLegend::createLayerTree
 
   return nodes;
 }
+
+
+// -------------------------------------------------------------------------
+
+
+QgsCustomVectorLayerLegend::QgsCustomVectorLayerLegend( QgsVectorLayer* vl )
+  : mLayer( vl )
+{
+  connect( mLayer, SIGNAL( rendererChanged() ), this, SIGNAL( itemsChanged() ) );
+};
+
+QList<QgsLayerTreeModelLegendNode*> QgsCustomVectorLayerLegend::createLayerTreeModelLegendNodes( QgsLayerTreeLayer* nodeLayer )
+{
+  QList<QgsLayerTreeModelLegendNode*> nodes;
+
+  QgsFeatureRendererV2* r = mLayer->rendererV2();
+  if ( !r )
+    return nodes;
+
+  if ( nodeLayer->customProperty( "showFeatureCount", 0 ).toBool() )
+    mLayer->countSymbolFeatures();
+
+  QSettings settings;
+  if ( settings.value( "/qgis/showLegendClassifiers", false ).toBool() && !r->legendClassificationAttribute().isEmpty() )
+    nodes.append( new QgsSimpleLegendNode( nodeLayer, r->legendClassificationAttribute() ) );
+
+  /*
+  for( auto data: mLegendNodesData)//r->legendSymbolItemsV2() )
+    nodes.append( new QgsCustomLegendNode( nodeLayer, QgsLegendSymbolItemV2( data.mSymbol.data(), data.mText, 0 ), data.mFeature, mLayer->pendingFields(), QSize(32,32) ) );
+*/
+  if ( nodes.count() == 1 && nodes[0]->data( Qt::EditRole ).toString().isEmpty() )
+    nodes[0]->setEmbeddedInParent( true );
+
+  return nodes;
+}
+
+
+bool QgsCustomVectorLayerLegend::writeXml( QDomNode & layerNode, QDomDocument & document) const
+{
+  QDomElement legendNode = document.createElement("CustomVectorLayerLegend");
+  QDomText testText = document.createTextNode( "test legend node" );
+  legendNode.appendChild( testText );
+  layerNode.appendChild( legendNode );
+  return true;
+}
+
 

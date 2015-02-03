@@ -33,35 +33,6 @@
 #include <QPixmap>
 
 
-QgsCustomVectorLayerLegend::QgsCustomVectorLayerLegend( QgsVectorLayer* vl )
-  : mLayer( vl )
-{
-  connect( mLayer, SIGNAL( rendererChanged() ), this, SIGNAL( itemsChanged() ) );
-};
-
-QList<QgsLayerTreeModelLegendNode*> QgsCustomVectorLayerLegend::createLayerTreeModelLegendNodes( QgsLayerTreeLayer* nodeLayer )
-{
-  QList<QgsLayerTreeModelLegendNode*> nodes;
-
-  QgsFeatureRendererV2* r = mLayer->rendererV2();
-  if ( !r )
-    return nodes;
-
-  if ( nodeLayer->customProperty( "showFeatureCount", 0 ).toBool() )
-    mLayer->countSymbolFeatures();
-
-  QSettings settings;
-  if ( settings.value( "/qgis/showLegendClassifiers", false ).toBool() && !r->legendClassificationAttribute().isEmpty() )
-    nodes.append( new QgsSimpleLegendNode( nodeLayer, r->legendClassificationAttribute() ) );
-
-  for( auto data: mLegendNodesData)//r->legendSymbolItemsV2() )
-    nodes.append( new QgsCustomLegendNode( nodeLayer, QgsLegendSymbolItemV2( data.mSymbol.data(), data.mText, 0 ), data.mFeature, mLayer->pendingFields(), QSize(32,32) ) );
-
-  if ( nodes.count() == 1 && nodes[0]->data( Qt::EditRole ).toString().isEmpty() )
-    nodes[0]->setEmbeddedInParent( true );
-
-  return nodes;
-}
 
 QgsLegendingGui::QgsLegendingGui( QgsVectorLayer* layer, QWidget* parent )
     : QWidget( parent )
@@ -83,19 +54,19 @@ QgsLegendingGui::QgsLegendingGui( QgsVectorLayer* layer, QWidget* parent )
   treeView->expandAll();
 
   QgsCustomVectorLayerLegend * customLegend = dynamic_cast<QgsCustomVectorLayerLegend *>( mLayer->legend() );
-  if ( customLegend  )
-  {
-    // populate the list with the legend contend
-    for ( auto data: customLegend->legendNodesData() )
-    {
-      QgsCustomLegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( data.mSymbol.data(), data.mText, 0 ), data.mFeature, mLayer->pendingFields(), QSize(32,32) );
-      QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), data.mText ) );
-      item->setData( mDataList.size() );
-      mDataList.append( data );
-      mTargetList.insertRow( 0, item.take() );
-    }
-    updateCustomLegend();
-  }
+  //if ( customLegend  )
+  //{
+  //  // populate the list with the legend contend
+  //  for ( auto data: customLegend->legendNodesData() )
+  //  {
+  //    QgsCustomLegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( data.mSymbol.data(), data.mText, 0 ), data.mFeature, mLayer->pendingFields(), QSize(32,32) );
+  //    QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), data.mText ) );
+  //    item->setData( mDataList.size() );
+  //    mDataList.append( data );
+  //    mTargetList.insertRow( 0, item.take() );
+  //  }
+  //  updateCustomLegend();
+  //}
   checkBox->setCheckState( customLegend ? Qt::Checked : Qt::Unchecked );
   frame->setEnabled( customLegend );
 
@@ -148,83 +119,99 @@ void QgsLegendingGui::populateSourceList( const QgsFeatureRequest & request )
   QgsFeatureRendererV2* r = mLayer->rendererV2();
   if ( !r )
     return;
+  const QgsSymbolV2List symbolList( r->symbols() );
 
-  // because we cannot evaluate expressions that are returned by the symbollayer
-  // we need to recreate en prepare them
-  QMap< QString , QSharedPointer<QgsExpression> > expressionMap;
-  for ( auto symbol: r->symbols() )
+  // evaluate expressions for all features
+  typedef QMap< QgsFeatureId, QString > ExpressionValues;
+  typedef QMap< QString, ExpressionValues > SymbolLayerProps;
+  typedef QList< SymbolLayerProps > SymbolLayers;
+  typedef QList< SymbolLayers > Symbols;
+  Symbols symbols;
+  QList< QgsFeatureId > featureIds;
+  for ( auto symbol: symbolList )
   {
+    SymbolLayers symLayers;
     if ( symbol )
     {
       for ( auto symbolLayer : symbol->symbolLayers() ) 
       {
+        SymbolLayerProps symLayerProps;
         for ( auto prop : symbolLayer->dataDefinedProperties() )
         {
-          const QString expStr = symbolLayer->dataDefinedPropertyString( prop );
-          QSharedPointer<QgsExpression > exp( new QgsExpression( expStr ) );
-          exp->prepare( mLayer->pendingFields() );
-          expressionMap[ expStr ] = exp;
-        }
-      }
-    }
-  }
+          QgsExpression exp( symbolLayer->dataDefinedPropertyString( prop ) );
+          exp.prepare( mLayer->pendingFields() );
 
-  // for all features, evaluate dd props to create a minimum
-  // set of features with all possible variations
-  QMap< QString , QgsFeature > propIdMap;
-  {
-    QgsFeatureIterator fit = mLayer->getFeatures(request);
-    QgsFeature feature;
-    while ( fit.nextFeature( feature ) )
-    {
-      for ( auto symbol: r->symbols() )
-      {
-        if ( symbol )
-        {
-          QString key;
-          for ( auto symbolLayer : symbol->symbolLayers() ) 
+          QgsFeatureIterator fit = mLayer->getFeatures(request);
+          QgsFeature feature;
+
+          ExpressionValues exprValues;
+          while ( fit.nextFeature( feature ) )
           {
-            for ( auto prop : symbolLayer->dataDefinedProperties() )
-            {
-              const QString expStr = symbolLayer->dataDefinedPropertyString( prop );
-              const QVariant val = expressionMap[ expStr ]->evaluate( &feature );
-              bool isDouble;
-              val.toDouble( &isDouble );
-              key += prop + "="+(isDouble ? QString::number( val.toDouble(), 'g', 2 ) : val.toString())+" ";
-            }
+            QVariant val = exp.evaluate( &feature ); 
+            // round double to 2 significant digits
+            // @todo round angles to 5 degrees
+            bool isDouble;
+            val.toDouble( &isDouble );
+            if ( isDouble ) val =  QString::number( val.toDouble(), 'g', 2 );
+            exprValues[ feature.id() ] = val.toString();
           }
-          propIdMap[ key ] = feature;
+          symLayerProps[ prop ] = exprValues;
         }
+        symLayers.append( symLayerProps );
       }
     }
+    symbols.append( symLayers );
   }
-
-  // render all features 
-  mSourceList.clear();
-  for ( QMapIterator<QString, QgsFeature> it( propIdMap ); it.hasNext(); ) 
+  
+  // for each symbol, we create a string of ddprop values and use
+  // it as a key in a set, if the key is already in, we skip
+  // if it's a new key, we create a new entry in the list
+  for ( int s = 0; s < symbolList.size(); s++ )
   {
-    it.next();
-    for ( auto symbol: r->symbols() )
+    QSet< QString > distinctValues;
+    for ( auto fid : mLayer->allFeatureIds() )
     {
-      QgsCustomLegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( symbol, it.key(), 0 ), it.value(), mLayer->pendingFields(), QSize(32,32) );
-      QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), it.key() ) );
-      item->setData( mDataList.size() );
-      mDataList.append( { QSharedPointer<QgsSymbolV2>(symbol->clone()), it.value(), ""} );
-      mSourceList.insertRow( 0, item.take() );
+      QString key;
+      for ( int l = 0; l < symbols[s].size(); l++ )
+      {
+        if ( symbols[s].size() > 1 ) key += "Symbol "+QString::number( l + 1 )+" ";
+        for ( auto prop: symbols[s][l].keys() )
+          key += prop + "=" + symbols[s][l][prop][fid] + " ";
+      }
+      if ( !distinctValues.contains( key ) )
+      {
+        distinctValues.insert( key );
+        // create an entry in the list
+        QScopedPointer< QgsSymbolV2 > symbol( symbolList[s]->clone() );
+        QgsSymbolLayerV2List symbolLayers( symbol->symbolLayers() );
+        for ( int l = 0; l < symbolLayers.size(); l++ )
+          for ( auto prop: symbolLayers[l]->dataDefinedProperties() )
+            symbolLayers[l]->setDataDefinedProperty( prop, symbols[s][l][prop][fid] );
+
+        QgsSymbolV2LegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( symbol.data(), key, 0 ) );
+        QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), key ) );
+        QDomDocument doc;
+        QDomElement elem = doc.createElement("symbol");
+        symbol->toSld( doc, elem, QgsStringMap() );
+        doc.appendChild( elem );
+        item->setData( doc.toString() );
+        std::cerr << "vmodbg " <<  doc.toString().toStdString() << "\n";
+        mSourceList.insertRow( 0, item.take() );
+      }
     }
   }
 }
 
 void QgsLegendingGui::updateCustomLegend()
 {
-  QList< QgsCustomVectorLayerLegend::NodeData > legendNodesData;
-  for ( int r = 0; r < mTargetList.rowCount(); r++ )
-  {
-    const QStandardItem * item = mTargetList.item( r );
-    QgsCustomVectorLayerLegend::NodeData data( mDataList[ item->data().toInt() ] );
-    data.mText = item->text();
-    legendNodesData.append( data );
-  }
-  static_cast<QgsCustomVectorLayerLegend *>( mLayer->legend() )->setLegendNodesData( legendNodesData );
+//  QList< QgsCustomVectorLayerLegend::NodeData > legendNodesData;
+//  for ( int r = 0; r < mTargetList.rowCount(); r++ )
+//  {
+//    const QStandardItem * item = mTargetList.item( r );
+//    QgsCustomVectorLayerLegend::NodeData data( mDataList[ item->data().toInt() ] );
+//    data.mText = item->text();
+//    legendNodesData.append( data );
+//  }
+//  static_cast<QgsCustomVectorLayerLegend *>( mLayer->legend() )->setLegendNodesData( legendNodesData );
 }
 
