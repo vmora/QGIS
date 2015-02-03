@@ -54,19 +54,21 @@ QgsLegendingGui::QgsLegendingGui( QgsVectorLayer* layer, QWidget* parent )
   treeView->expandAll();
 
   QgsCustomVectorLayerLegend * customLegend = dynamic_cast<QgsCustomVectorLayerLegend *>( mLayer->legend() );
-  //if ( customLegend  )
-  //{
-  //  // populate the list with the legend contend
-  //  for ( auto data: customLegend->legendNodesData() )
-  //  {
-  //    QgsCustomLegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( data.mSymbol.data(), data.mText, 0 ), data.mFeature, mLayer->pendingFields(), QSize(32,32) );
-  //    QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), data.mText ) );
-  //    item->setData( mDataList.size() );
-  //    mDataList.append( data );
-  //    mTargetList.insertRow( 0, item.take() );
-  //  }
-  //  updateCustomLegend();
-  //}
+  if ( customLegend  )
+  {
+    // populate the list with the legend contend
+    for ( auto legendItem: customLegend->legendItems() )
+    {
+      QgsSymbolV2LegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( legendItem.symbol(), legendItem.label(), 0 ) );
+      QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), legendItem.label() ) );
+      QDomDocument doc;
+      QDomElement elem = QgsSymbolLayerV2Utils::saveSymbol( legendItem.label(), legendItem.symbol(), doc );
+      doc.appendChild( elem );
+      item->setData( doc.toString() );
+      mTargetList.appendRow( item.take() );
+    }
+    updateCustomLegend();
+  }
   checkBox->setCheckState( customLegend ? Qt::Checked : Qt::Unchecked );
   frame->setEnabled( customLegend );
 
@@ -191,12 +193,10 @@ void QgsLegendingGui::populateSourceList( const QgsFeatureRequest & request )
         QgsSymbolV2LegendNode node( mLayerTreeLayer, QgsLegendSymbolItemV2( symbol.data(), key, 0 ) );
         QScopedPointer< QStandardItem > item( new QStandardItem( node.data(Qt::DecorationRole).value<QPixmap>(), key ) );
         QDomDocument doc;
-        QDomElement elem = doc.createElement("symbol");
-        symbol->toSld( doc, elem, QgsStringMap() );
+        QDomElement elem = QgsSymbolLayerV2Utils::saveSymbol( key, symbol.data(), doc );
         doc.appendChild( elem );
         item->setData( doc.toString() );
-        std::cerr << "vmodbg " <<  doc.toString().toStdString() << "\n";
-        mSourceList.insertRow( 0, item.take() );
+        mSourceList.appendRow( item.take() );
       }
     }
   }
@@ -204,14 +204,15 @@ void QgsLegendingGui::populateSourceList( const QgsFeatureRequest & request )
 
 void QgsLegendingGui::updateCustomLegend()
 {
-//  QList< QgsCustomVectorLayerLegend::NodeData > legendNodesData;
-//  for ( int r = 0; r < mTargetList.rowCount(); r++ )
-//  {
-//    const QStandardItem * item = mTargetList.item( r );
-//    QgsCustomVectorLayerLegend::NodeData data( mDataList[ item->data().toInt() ] );
-//    data.mText = item->text();
-//    legendNodesData.append( data );
-//  }
-//  static_cast<QgsCustomVectorLayerLegend *>( mLayer->legend() )->setLegendNodesData( legendNodesData );
+  QgsCustomVectorLayerLegend* customLegend = static_cast<QgsCustomVectorLayerLegend *>( mLayer->legend() );
+  customLegend->clear();
+  for ( int i = 0; i < mTargetList.rowCount(); i++ )
+  {
+    QDomDocument doc;
+    doc.setContent( mTargetList.item(i)->data().toString() );
+    QDomElement elem = doc.documentElement();
+    QScopedPointer< QgsSymbolV2 > symbol( QgsSymbolLayerV2Utils::loadSymbol( elem ) );
+    customLegend->append( QgsLegendSymbolItemV2( symbol.data(), mTargetList.item(i)->text(), 0 ) );
+  }
 }
 

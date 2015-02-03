@@ -17,6 +17,7 @@
 #define QGSMAPLAYERLEGEND_H
 
 #include <QObject>
+#include <QDomNode>
 
 class QgsLayerTreeLayer;
 class QgsLayerTreeModelLegendNode;
@@ -24,7 +25,6 @@ class QgsPluginLayer;
 class QgsRasterLayer;
 class QgsVectorLayer;
 class QDomDocument;
-class QDomNode;
 
 
 /**
@@ -138,20 +138,27 @@ class CORE_EXPORT QgsDefaultPluginLayerLegend : public QgsMapLayerLegend
     QgsPluginLayer* mLayer;
 };
 
+#include "qgslegendsymbolitemv2.h"
+
 /** Custom legend for vector layers
  * @note added in 2.10
  */
 class CORE_EXPORT QgsCustomVectorLayerLegend : public QgsMapLayerLegend
 {
   public:
-    explicit QgsCustomVectorLayerLegend( QgsVectorLayer* vl );
+    explicit QgsCustomVectorLayerLegend( QgsVectorLayer* vl, const QDomNode & customLegendNode = QDomNode() );
 
     QList<QgsLayerTreeModelLegendNode*> createLayerTreeModelLegendNodes( QgsLayerTreeLayer* nodeLayer ) override;
 
     bool writeXml( QDomNode & layerNode, QDomDocument & document) const override;
 
+    void clear(){ mLegendItems.clear(); emit itemsChanged(); }
+    void append( const QgsLegendSymbolItemV2 & item ){ mLegendItems.append( item ); emit itemsChanged(); }
+    const QList< QgsLegendSymbolItemV2 > & legendItems() const { return mLegendItems; }
+
   private:
     QgsVectorLayer* mLayer;
+    QList< QgsLegendSymbolItemV2 > mLegendItems;
 };
 
 #endif // QGSMAPLAYERLEGEND_H

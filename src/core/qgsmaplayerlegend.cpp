@@ -23,6 +23,7 @@
 #include "qgsrasterlayer.h"
 #include "qgsrendererv2.h"
 #include "qgsvectorlayer.h"
+#include "qgssymbollayerv2utils.h"
 
 
 QgsMapLayerLegend::QgsMapLayerLegend( QObject *parent ) :
@@ -49,7 +50,7 @@ QgsMapLayerLegend* QgsMapLayerLegend::load( QgsVectorLayer* vl, const QDomNode& 
 {
   QDomNode customLegendNode = layer_node.namedItem( "CustomVectorLayerLegend" ).toElement();
   if ( !customLegendNode.isNull() )
-    return new QgsCustomVectorLayerLegend( vl );
+    return new QgsCustomVectorLayerLegend( vl, customLegendNode );
   else
     return new QgsDefaultVectorLayerLegend( vl );
 }
@@ -297,9 +298,23 @@ QList<QgsLayerTreeModelLegendNode*> QgsDefaultPluginLayerLegend::createLayerTree
 // -------------------------------------------------------------------------
 
 
-QgsCustomVectorLayerLegend::QgsCustomVectorLayerLegend( QgsVectorLayer* vl )
+QgsCustomVectorLayerLegend::QgsCustomVectorLayerLegend( QgsVectorLayer* vl, const QDomNode & customLegendNode )
   : mLayer( vl )
 {
+  for ( QDomElement e = customLegendNode.firstChildElement(); !e.isNull(); e = e.nextSiblingElement() )
+  {
+    if ( e.tagName() == "symbol" )
+    {
+      QScopedPointer< QgsSymbolV2 > symbol( QgsSymbolLayerV2Utils::loadSymbol( e ) );
+      if ( symbol.data() )
+        mLegendItems.append( QgsLegendSymbolItemV2( symbol.data(), e.attribute( "name" ), 0 ) );
+    }
+    else
+    {
+      QgsDebugMsg( "unknown tag: " + e.tagName() );
+    }
+  }
+
   connect( mLayer, SIGNAL( rendererChanged() ), this, SIGNAL( itemsChanged() ) );
 };
 
@@ -318,10 +333,11 @@ QList<QgsLayerTreeModelLegendNode*> QgsCustomVectorLayerLegend::createLayerTreeM
   if ( settings.value( "/qgis/showLegendClassifiers", false ).toBool() && !r->legendClassificationAttribute().isEmpty() )
     nodes.append( new QgsSimpleLegendNode( nodeLayer, r->legendClassificationAttribute() ) );
 
-  /*
-  for( auto data: mLegendNodesData)//r->legendSymbolItemsV2() )
-    nodes.append( new QgsCustomLegendNode( nodeLayer, QgsLegendSymbolItemV2( data.mSymbol.data(), data.mText, 0 ), data.mFeature, mLayer->pendingFields(), QSize(32,32) ) );
-*/
+  for ( auto i: mLegendItems )
+  {
+    nodes.append( new QgsSymbolV2LegendNode( nodeLayer, i ) );
+  }
+
   if ( nodes.count() == 1 && nodes[0]->data( Qt::EditRole ).toString().isEmpty() )
     nodes[0]->setEmbeddedInParent( true );
 
@@ -332,8 +348,11 @@ QList<QgsLayerTreeModelLegendNode*> QgsCustomVectorLayerLegend::createLayerTreeM
 bool QgsCustomVectorLayerLegend::writeXml( QDomNode & layerNode, QDomDocument & document) const
 {
   QDomElement legendNode = document.createElement("CustomVectorLayerLegend");
-  QDomText testText = document.createTextNode( "test legend node" );
-  legendNode.appendChild( testText );
+  for ( auto item : legendItems() )
+  {
+    QDomElement elem = QgsSymbolLayerV2Utils::saveSymbol( item.label(), item.symbol(), document );
+    legendNode.appendChild( elem ); 
+  }
   layerNode.appendChild( legendNode );
   return true;
 }
